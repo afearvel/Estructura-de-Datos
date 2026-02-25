@@ -50,3 +50,48 @@ def operaciones(op, F, C):
         return liberar(F, C)
     elif op == "CONSULTAR":
         return consultar(F, C)
+    
+#-------------------------------------------
+
+pruebas = [
+    ("RESERVAR", 1, 1),
+    ("RESERVAR", 1, 2),
+    ("RESERVAR", 1, 1),
+    ("CONSULTAR", 1, 1),
+    ("LIBERAR", 1, 1),
+    ("LIBERAR", 1, 1),
+    ("RESERVAR", 3, 4),
+    ("RESERVAR", 6, 6),
+    ("CONSULTAR", 6, 6),
+    ("RESERVAR", 2, 5)
+]
+
+for op, f, c in pruebas:
+    print(operaciones(op, f-1, c-1,))
+
+
+#total reservados
+total = 0
+
+for fila in Asientos:
+    for a in fila:
+        if a == 1:
+            total += 1
+print("Total reservados:", total)
+
+
+#mayor reservados
+mayor = -1
+fila_max = 0
+
+for i in range(len(Asientos)):
+
+    cont = 0
+    for a in Asientos[i]:
+        if a == 1:
+            cont += 1
+
+    if cont > mayor:
+        mayor = cont
+        fila_max = i + 1
+print("Fila con más reservados:", fila_max)
