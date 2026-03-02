@@ -24,7 +24,8 @@ depositos = []
 
 
 def retirarDinero(saldo, cantidad):
-    saldo_actual = deque(saldo)
+    saldo_actual = peek(saldo)
+    deque(saldo)
     if saldo_actual >= cantidad:
         saldo_actual -= cantidad
         enque(retiros, cantidad)
@@ -34,7 +35,8 @@ def retirarDinero(saldo, cantidad):
     enque(saldo, saldo_actual)
 
 def depositarDinero(saldo, cantidad):
-    saldo_actual = deque(saldo)
+    saldo_actual = peek(saldo)
+    deque(saldo)
     saldo_actual += cantidad
     enque(depositos, cantidad)
     print("Deposito realizado, saldo:", saldo_actual)
@@ -45,6 +47,7 @@ print("Saldos:", saldo)
 
 for _ in range(size(saldo)):
     retirarDinero(saldo, 500)
+    
 for _ in range(size(saldo)):
     depositarDinero(saldo, 300)
 
