@@ -15,7 +15,7 @@ def is_empty(lista):
     
 def size(lista):
     return len(lista)
-
+ 
 
 saldo = [1000, 1000, 1000, 1000, 1000]
 retiros = []
