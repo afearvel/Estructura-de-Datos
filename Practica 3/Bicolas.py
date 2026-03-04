@@ -37,23 +37,10 @@ class BiCola:
         self.contador -= 1
         return elemento
 
-    def dequeue_final(self):
-        if self.is_empty():
-            return None
-        self.tail = (self.tail - 1) % self.capacidad
-        elemento = self.datos[self.tail]
-        self.contador -= 1
-        return elemento
-
     def peek_frente(self):
         if self.is_empty():
             return None
         return self.datos[self.head]
-
-    def peek_final(self):
-        if self.is_empty():
-            return None
-        return self.datos[(self.tail - 1) % self.capacidad]
 
     def mostrar(self):
         elementos = []
@@ -65,26 +52,16 @@ class BiCola:
 
 
 # =============================
-# FUNCIONES DEL BANCO
+# FUNCION RETIRO
 # =============================
 
 def aplicar_retiro(saldos: BiCola, monto: int, historial: BiCola):
     saldo_original = saldos.dequeue_frente()
 
     if historial is not None:
-        historial.enqueue_frente(saldo_original)  # head = retiros
+        historial.enqueue_frente(f"-{monto}")
 
     nuevo_saldo = saldo_original - monto
-    saldos.enqueue_final(nuevo_saldo)
-
-
-def aplicar_deposito(saldos: BiCola, monto: int, historial: BiCola):
-    saldo_original = saldos.dequeue_frente()
-
-    if historial is not None:
-        historial.enqueue_final(saldo_original)  # tail = depósitos
-
-    nuevo_saldo = saldo_original + monto
     saldos.enqueue_final(nuevo_saldo)
 
 
@@ -95,19 +72,18 @@ def aplicar_deposito(saldos: BiCola, monto: int, historial: BiCola):
 saldos = BiCola(10)
 historial = BiCola(20)
 
+# saldos iniciales
 for _ in range(5):
     saldos.enqueue_final(1000)
 
-monto_retiro = 500
-monto_deposito = 300
+# lista de retiros distintos
+retiros = [500, 400, 300, 200, 100]
 
-for _ in range(5):
-    aplicar_retiro(saldos, monto_retiro, historial)
-
-for _ in range(5):
-    aplicar_deposito(saldos, monto_deposito, historial)
+# aplicar cada retiro
+for monto in retiros:
+    aplicar_retiro(saldos, monto, historial)
 
 print("Historial:", historial.mostrar())
 print("Saldos finales:", saldos.mostrar())
-print("Saldo actual:", saldos.peek_frente())
+print("Saldo actual al frente:", saldos.peek_frente())
 print("Tamaño del historial:", historial.size())
