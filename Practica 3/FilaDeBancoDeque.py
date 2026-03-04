@@ -33,7 +33,7 @@ def aplicar_deposito(saldo: deque, monto: int, historial: deque) -> None:
     nuevo_saldo = saldo_original + monto
     enqueue(saldo, nuevo_saldo)
 
-# ---
+# ------------------------
 
 saldos = deque()
 historial_retiros = deque()
@@ -44,15 +44,13 @@ for _ in range(5):
 monto_retiro = 500
 monto_deposito = 300
 
-#retiros
+# retiros
 for _ in range(5):
     aplicar_retiro(saldos, monto_retiro, historial_retiros)
 
-#depósitos
+# depósitos
 for _ in range(5):
     aplicar_deposito(saldos, monto_deposito, None)
 
 print("Historial de retiros:", list(historial_retiros))
 print("Saldos finales:", list(saldos))
-
-
