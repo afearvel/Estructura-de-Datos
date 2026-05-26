@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% block title %}Visualizador — Árbol{% endblock %}
+{% block extra_style %}
+<style>
+.viz-title{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
+.viz-sub{font-size:13px;color:var(--text2);margin-bottom:20px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.ctrl-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);transition:all 0.15s}
+.ctrl-btn:hover{border-color:var(--border2);color:var(--text)}
+.ctrl-btn.run{background:var(--accent);border-color:var(--accent);color:#fff}
+.inp{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-family:var(--font-mono);width:200px;outline:none}
+.inp:focus{border-color:var(--accent)}
+.canvas-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+canvas{display:block;width:100%;height:360px}
+.traversals{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.trav-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+.trav-name{font-size:10px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.trav-items{display:flex;flex-wrap:wrap;gap:4px}
+.trav-n{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-family:var(--font-mono);font-size:12px;color:var(--text2);transition:all 0.3s}
+.trav-n.hl{border-color:var(--accent);color:var(--accent2);background:#7c6fcd22}
+.msg{font-size:12px;color:var(--text3);font-family:var(--font-mono);padding:8px 0}
+</style>
+{% endblock %}
+{% block content %}
+<div class="viz-title">Visualizador — Árbol Binario de Búsqueda</div>
+<div class="viz-sub">Inserta valores y observa cómo se construye el árbol y sus recorridos</div>
+
+<div class="controls">
+  <input class="inp" id="inp-val" type="number" placeholder="Valor a insertar..." onkeydown="if(event.key==='Enter')insert()">
+  <button class="ctrl-btn run" onclick="insert()">+ Insertar</button>
+  <button class="ctrl-btn" onclick="insertMulti()">Insertar secuencia default</button>
+  <button class="ctrl-btn" onclick="clearTree()">✕ Limpiar</button>
+  <button class="ctrl-btn run" onclick="animateTraversals()">▶ Animar recorridos</button>
+</div>
+<div class="msg" id="msg">Ingresa un valor o usa la secuencia default.</div>
+
+<div class="canvas-wrap"><canvas id="cvs"></canvas></div>
+
+<div class="traversals">
+  <div class="trav-card"><div class="trav-name">Preorden</div><div class="trav-items" id="pre"></div></div>
+  <div class="trav-card"><div class="trav-name">Inorden</div><div class="trav-items" id="ino"></div></div>
+  <div class="trav-card"><div class="trav-name">Postorden</div><div class="trav-items" id="pos"></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+class Nodo { constructor(v){this.v=v;this.izq=null;this.der=null;this.x=0;this.y=0;this.hl=false;this.new=true;} }
+let raiz=null, activeNode=null;
+
+function insert(val=null) {
+  let v = val !== null ? val : parseInt(document.getElementById('inp-val').value);
+  if (isNaN(v)) return;
+  document.getElementById('inp-val').value = '';
+  raiz = insertNode(raiz, v);
+  layout(raiz, 0, 1, 0);
+  updateTraversals();
+  drawTree();
+  document.getElementById('msg').textContent = `Insertado: ${v}`;
+  setTimeout(() => { clearNew(raiz); drawTree(); }, 600);
+}
+
+function clearNew(n) { if(!n)return; n.new=false; clearNew(n.izq); clearNew(n.der); }
+
+function insertNode(n, v) {
+  if (!n) { let nd=new Nodo(v); return nd; }
+  if (v < n.v) n.izq = insertNode(n.izq, v);
+  else if (v > n.v) n.der = insertNode(n.der, v);
+  return n;
+}
+
+function layout(n, depth, pos, offset) {
+  if (!n) return;
+  const W = cvs.offsetWidth, H = 360;
+  const levelH = Math.min(70, (H-40)/(maxDepth(raiz)+1));
+  n.x = pos * W;
+  n.y = 40 + depth * levelH;
+  layout(n.izq, depth+1, pos - offset/2, offset/2);
+  layout(n.der, depth+1, pos + offset/2, offset/2);
+}
+
+function maxDepth(n) { if(!n)return 0; return 1+Math.max(maxDepth(n.izq),maxDepth(n.der)); }
+
+function drawTree() {
+  const W = cvs.offsetWidth*devicePixelRatio, H = cvs.offsetHeight*devicePixelRatio;
+  cvs.width=W; cvs.height=H;
+  ctx.clearRect(0,0,W,H);
+  if (!raiz) return;
+  layout(raiz,0,0.5,0.25);
+  drawEdges(raiz,W,H);
+  drawNodes(raiz,W,H);
+}
+
+function drawEdges(n,W,H) {
+  if (!n) return;
+  if (n.izq) { drawEdge(n,n.izq,W,H); drawEdges(n.izq,W,H); }
+  if (n.der) { drawEdge(n,n.der,W,H); drawEdges(n.der,W,H); }
+}
+
+function drawEdge(a,b,W,H) {
+  ctx.beginPath();
+  ctx.moveTo(a.x*W, a.y*(H/360*devicePixelRatio));
+  ctx.lineTo(b.x*W, b.y*(H/360*devicePixelRatio));
+  ctx.strokeStyle = '#ffffff18'; ctx.lineWidth = 1.5*devicePixelRatio;
+  ctx.stroke();
+}
+
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+
+function drawNodes(n,W,H) {
+  if (!n) return;
+  drawNodes(n.izq,W,H); drawNodes(n.der,W,H);
+  const R = 18*devicePixelRatio;
+  const x = n.x*W, y = n.y*(H/360*devicePixelRatio);
+  ctx.beginPath(); ctx.arc(x,y,R,0,Math.PI*2);
+  let fill = n===activeNode ? '#7c6fcd' : n.new ? '#4ecdc4' : '#1a1a24';
+  let stroke = n===activeNode ? '#a89fe8' : n.new ? '#4ecdc4' : n.hl ? '#f4a261' : '#ffffff22';
+  ctx.fillStyle=fill; ctx.fill();
+  ctx.strokeStyle=stroke; ctx.lineWidth=2*devicePixelRatio; ctx.stroke();
+  ctx.fillStyle='#e8e8f0'; ctx.font=`bold ${13*devicePixelRatio}px monospace`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(n.v, x, y);
+}
+
+function insertMulti() {
+  clearTree();
+  [3,1,4,2,5,6,0].forEach((v,i)=>setTimeout(()=>insert(v),i*400));
+}
+
+function clearTree() { raiz=null; activeNode=null; drawTree(); updateTraversals(); document.getElementById('msg').textContent='Árbol limpio.'; }
+
+function preorden(n,r=[]){ if(!n)return r; r.push(n.v); preorden(n.izq,r); preorden(n.der,r); return r; }
+function inorden(n,r=[]){ if(!n)return r; inorden(n.izq,r); r.push(n.v); inorden(n.der,r); return r; }
+function postorden(n,r=[]){ if(!n)return r; postorden(n.izq,r); postorden(n.der,r); r.push(n.v); return r; }
+
+function updateTraversals() {
+  ['pre','ino','pos'].forEach(id=>document.getElementById(id).innerHTML='');
+  if (!raiz) return;
+  const render = (id,arr) => document.getElementById(id).innerHTML = arr.map(v=>`<span class="trav-n">${v}</span>`).join('');
+  render('pre',preorden(raiz)); render('ino',inorden(raiz)); render('pos',postorden(raiz));
+}
+
+async function animateTraversals() {
+  if (!raiz) return;
+  const highlight = async (nodes, containerId) => {
+    const spans = document.querySelectorAll(`#${containerId} .trav-n`);
+    for (let i=0;i<nodes.length;i++) {
+      // highlight node in tree
+      const find = (n,v) => { if(!n)return null; if(n.v===v)return n; return find(n.izq,v)||find(n.der,v); };
+      activeNode = find(raiz, nodes[i]);
+      drawTree();
+      if(spans[i]) { spans[i].classList.add('hl'); }
+      await new Promise(r=>setTimeout(r,500));
+    }
+    activeNode=null; drawTree();
+  };
+  updateTraversals();
+  document.getElementById('msg').textContent='Preorden...';
+  await highlight(preorden(raiz),'pre');
+  await new Promise(r=>setTimeout(r,300));
+  document.getElementById('msg').textContent='Inorden...';
+  await highlight(inorden(raiz),'ino');
+  await new Promise(r=>setTimeout(r,300));
+  document.getElementById('msg').textContent='Postorden...';
+  await highlight(postorden(raiz),'pos');
+  document.getElementById('msg').textContent='✓ Recorridos completos';
+}
+
+drawTree();
+window.addEventListener('resize', drawTree);
+</script>
+{% endblock %}

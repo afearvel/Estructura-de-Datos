@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% block title %}Visualizador — Grafos{% endblock %}
+{% block extra_style %}
+<style>
+.viz-title{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
+.viz-sub{font-size:13px;color:var(--text2);margin-bottom:16px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.ctrl-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);transition:all 0.15s}
+.ctrl-btn:hover{border-color:var(--border2);color:var(--text)}
+.ctrl-btn.active,.ctrl-btn.run{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctrl-btn:disabled{opacity:0.4;cursor:not-allowed}
+.inp-sm{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-family:var(--font-mono);width:70px;outline:none}
+.inp-sm:focus{border-color:var(--accent)}
+.canvas-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+canvas{display:block;width:100%;height:380px}
+.log-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;max-height:160px;overflow-y:auto}
+.log-title{font-size:10px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.log-item{font-size:12px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border);font-family:var(--font-mono)}
+.log-item:last-child{border:none}
+.log-item span{color:var(--accent2)}
+.speed-wrap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3)}
+input[type=range]{accent-color:var(--accent);width:90px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="viz-title">Visualizador — Grafos</div>
+<div class="viz-sub">BFS, Dijkstra y Prim animados sobre el mismo grafo</div>
+
+<div class="controls">
+  <button class="ctrl-btn active" id="btn-bfs" onclick="setMode('bfs')">BFS</button>
+  <button class="ctrl-btn" id="btn-dijk" onclick="setMode('dijkstra')">Dijkstra</button>
+  <button class="ctrl-btn" id="btn-prim" onclick="setMode('prim')">Prim</button>
+  <span style="color:var(--text3);font-size:12px">Inicio:</span>
+  <input class="inp-sm" id="inp-start" type="number" value="0" min="0" max="7">
+  <span style="color:var(--text3);font-size:12px" id="lbl-dest">Destino:</span>
+  <input class="inp-sm" id="inp-dest" type="number" value="7" min="0" max="7">
+  <button class="ctrl-btn run" id="btn-run" onclick="runAlgo()">▶ Ejecutar</button>
+  <button class="ctrl-btn" onclick="resetViz()">↺ Reset</button>
+  <div class="speed-wrap">
+    <span>Vel</span>
+    <input type="range" id="speed" min="100" max="1200" value="600" oninput="spd=1300-parseInt(this.value)">
+  </div>
+</div>
+
+<div class="canvas-wrap"><canvas id="cvs"></canvas></div>
+<div class="log-panel"><div class="log-title" id="log-title">Log de ejecución</div><div id="log-body"></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+let mode = 'bfs', spd = 700, running = false;
+
+// Graph: nodes with positions, weighted edges
+const NODES = [
+  {id:0,label:'0'},{id:1,label:'1'},{id:2,label:'2'},{id:3,label:'3'},
+  {id:4,label:'4'},{id:5,label:'5'},{id:6,label:'6'},{id:7,label:'7'}
+];
+const GRAPH_W = { // weighted (dijkstra/prim)
+  0:[[1,9],[4,6]], 1:[[0,9],[3,8]], 2:[[5,6],[4,5]],
+  3:[[1,8],[5,1],[7,7]], 4:[[0,6],[2,5],[6,3]],
+  5:[[3,1],[2,6]], 6:[[4,3],[7,2]], 7:[[3,7],[6,2]]
+};
+
+// Node positions (normalized 0-1)
+const POS = [
+  [0.15,0.2],[0.4,0.1],[0.75,0.35],[0.6,0.75],
+  [0.45,0.45],[0.85,0.7],[0.7,0.55],[0.85,0.45]
+];
+
+let nodeState = {}; // 'default','visiting','visited','path','mst'
+let edgeState = {}; // key: 'u-v', val: 'default','active','visited','path','mst'
+let nodeLabel = {}; // dist label
+
+function ekey(a,b){ return a<b?`${a}-${b}`:`${b}-${a}`; }
+
+function resetViz() {
+  nodeState={}; edgeState={}; nodeLabel={};
+  document.getElementById('log-body').innerHTML='';
+  draw();
+}
+
+function setMode(m) {
+  mode=m;
+  ['bfs','dijk','prim'].forEach(id=>{
+    document.getElementById('btn-'+id).classList.toggle('active', id===m||('dijkstra'===m&&id==='dijk'));
+  });
+  document.getElementById('lbl-dest').style.opacity = m==='dijkstra'?'1':'0.3';
+  document.getElementById('inp-dest').disabled = m!=='dijkstra';
+  resetViz();
+}
+
+function log(msg) {
+  const d = document.getElementById('log-body');
+  d.innerHTML += `<div class="log-item">${msg}</div>`;
+  d.scrollTop = d.scrollHeight;
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function runAlgo() {
+  if (running) return;
+  running=true;
+  resetViz();
+  document.getElementById('btn-run').disabled=true;
+  const start = parseInt(document.getElementById('inp-start').value)||0;
+  const dest = parseInt(document.getElementById('inp-dest').value)||7;
+  document.getElementById('log-title').textContent = mode.toUpperCase() + ' — ejecutando...';
+
+  if (mode==='bfs') await runBFS(start);
+  else if (mode==='dijkstra') await runDijkstra(start,dest);
+  else await runPrim(start);
+
+  running=false;
+  document.getElementById('btn-run').disabled=false;
+  document.getElementById('log-title').textContent='Log — completado ✓';
+}
+
+async function runBFS(start) {
+  const visited=new Set([start]), queue=[start];
+  nodeState[start]='visiting'; draw(); await sleep(spd);
+  log(`<span>Inicio</span>: nodo ${start} → cola: [${queue}]`);
+  while (queue.length) {
+    const u=queue.shift();
+    nodeState[u]='visited'; draw();
+    log(`<span>Visita</span>: ${u} → vecinos: ${GRAPH_W[u].map(([v])=>v).join(', ')}`);
+    await sleep(spd);
+    for (const [v] of GRAPH_W[u]) {
+      if (!visited.has(v)) {
+        visited.add(v); queue.push(v);
+        edgeState[ekey(u,v)]='visited'; nodeState[v]='visiting'; draw();
+        log(`  enqueue: ${v}`); await sleep(spd/1.5);
+      }
+    }
+  }
+}
+
+async function runDijkstra(start,dest) {
+  const dist={}, prev={}, pq=[];
+  NODES.forEach(n=>{dist[n.id]=Infinity;prev[n.id]=null;});
+  dist[start]=0; nodeLabel[start]='0';
+  pq.push([0,start]);
+  nodeState[start]='visiting'; draw(); await sleep(spd);
+  log(`<span>Dijkstra</span> desde ${start} hasta ${dest}`);
+
+  while (pq.length) {
+    pq.sort((a,b)=>a[0]-b[0]);
+    const [d,u]=pq.shift();
+    if (d>dist[u]) continue;
+    nodeState[u]='visited'; draw(); log(`<span>Expande</span>: nodo ${u} dist=${d}`); await sleep(spd);
+    for (const [v,w] of GRAPH_W[u]) {
+      const nd=d+w;
+      if (nd<dist[v]) {
+        dist[v]=nd; prev[v]=u; nodeLabel[v]=nd;
+        edgeState[ekey(u,v)]='active'; nodeState[v]='visiting';
+        pq.push([nd,v]); draw();
+        log(`  actualiza ${v}: dist=${nd}`); await sleep(spd/1.5);
+      }
+    }
+  }
+  // reconstruct path
+  let n=dest; const path=[];
+  while(n!==null){path.unshift(n);n=prev[n];}
+  for(let i=0;i<path.length-1;i++){
+    edgeState[ekey(path[i],path[i+1])]='path';
+    nodeState[path[i]]='path'; nodeState[path[i+1]]='path';
+  }
+  draw();
+  log(`<span>Camino</span>: ${path.join(' → ')} | costo: ${dist[dest]}`);
+}
+
+async function runPrim(start) {
+  const visited=new Set([start]); nodeState[start]='visited'; draw();
+  log(`<span>Prim</span> desde nodo ${start}`); await sleep(spd);
+  let total=0;
+  while (visited.size<NODES.length) {
+    let best=null,bw=Infinity,bu=-1,bv=-1;
+    for (const u of visited) {
+      for (const [v,w] of GRAPH_W[u]) {
+        if (!visited.has(v) && w<bw) { bw=w;bu=u;bv=v;best=true; }
+      }
+    }
+    if (!best) break;
+    visited.add(bv); total+=bw;
+    edgeState[ekey(bu,bv)]='mst'; nodeState[bv]='visited'; draw();
+    log(`<span>MST</span>: arista ${bu}→${bv} peso=${bw} | total=${total}`); await sleep(spd);
+  }
+}
+
+function draw() {
+  const W=cvs.offsetWidth*devicePixelRatio, H=cvs.offsetHeight*devicePixelRatio;
+  cvs.width=W; cvs.height=H;
+  ctx.clearRect(0,0,W,H);
+
+  // Draw edges
+  const seen=new Set();
+  for (const [u,neighbors] of Object.entries(GRAPH_W)) {
+    for (const [v,w] of neighbors) {
+      const k=ekey(u,v); if(seen.has(k))continue; seen.add(k);
+      const [x1,y1]=[POS[u][0]*W, POS[u][1]*H];
+      const [x2,y2]=[POS[v][0]*W, POS[v][1]*H];
+      const st=edgeState[k]||'default';
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+      ctx.strokeStyle=st==='path'?'#7c6fcd':st==='mst'?'#4ecdc4':st==='active'?'#f4a261':st==='visited'?'#6bcb7744':'#ffffff15';
+      ctx.lineWidth=(st==='path'||st==='mst'?3:st==='active'?2:1.5)*devicePixelRatio;
+      ctx.stroke();
+      // weight label
+      const mx=(x1+x2)/2, my=(y1+y2)/2;
+      ctx.fillStyle='#ffffff44'; ctx.font=`${10*devicePixelRatio}px monospace`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(w,mx,my);
+    }
+  }
+
+  // Draw nodes
+  NODES.forEach(({id}) => {
+    const [nx,ny]=[POS[id][0]*W, POS[id][1]*H];
+    const R=18*devicePixelRatio;
+    const st=nodeState[id]||'default';
+    ctx.beginPath(); ctx.arc(nx,ny,R,0,Math.PI*2);
+    ctx.fillStyle=st==='path'?'#7c6fcd':st==='visited'?'#4ecdc4':st==='visiting'?'#f4a261':'#1a1a24';
+    ctx.fill();
+    ctx.strokeStyle=st==='default'?'#ffffff22':'#ffffff55'; ctx.lineWidth=2*devicePixelRatio; ctx.stroke();
+    ctx.fillStyle='#e8e8f0'; ctx.font=`bold ${13*devicePixelRatio}px monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(id,nx,ny);
+    if (nodeLabel[id]!==undefined) {
+      ctx.fillStyle='#f4a261cc'; ctx.font=`${10*devicePixelRatio}px monospace`;
+      ctx.fillText(nodeLabel[id],nx,ny-R-6*devicePixelRatio);
+    }
+  });
+}
+
+setMode('bfs');
+draw();
+window.addEventListener('resize',draw);
+</script>
+{% endblock %}

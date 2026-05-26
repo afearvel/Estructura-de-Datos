@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% block title %}Visualizador — Colas y Pilas{% endblock %}
+{% block extra_style %}
+<style>
+.viz-title{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
+.viz-sub{font-size:13px;color:var(--text2);margin-bottom:16px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.ctrl-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);transition:all 0.15s}
+.ctrl-btn:hover{border-color:var(--border2);color:var(--text)}
+.ctrl-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctrl-btn.enq{background:#4ecdc420;border-color:#4ecdc4;color:#4ecdc4}
+.ctrl-btn.deq{background:#e86d5e20;border-color:#e86d5e;color:#e86d5e}
+.inp{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-family:var(--font-mono);width:120px;outline:none}
+.inp:focus{border-color:var(--accent)}
+.canvas-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+canvas{display:block;width:100%;height:200px}
+.info-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.info-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+.info-val{font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text)}
+.info-lbl{font-size:10px;color:var(--text3);margin-top:2px}
+.log-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;max-height:140px;overflow-y:auto}
+.log-title{font-size:10px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;margin-bottom:8px}
+.log-item{font-size:12px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);font-family:var(--font-mono)}
+.log-item span{color:var(--accent2)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="viz-title">Visualizador — Colas y Pilas</div>
+<div class="viz-sub">Interactúa con Cola simple, Cola Circular y Pila en tiempo real</div>
+
+<div class="controls">
+  <button class="ctrl-btn active" onclick="setStruct('queue')">Cola (Queue)</button>
+  <button class="ctrl-btn" onclick="setStruct('circular')">Cola Circular</button>
+  <button class="ctrl-btn" onclick="setStruct('stack')">Pila (Stack)</button>
+  <button class="ctrl-btn" onclick="setStruct('deque')">Bicola (Deque)</button>
+</div>
+<div class="controls">
+  <input class="inp" id="inp-val" placeholder="Valor..." value="A">
+  <button class="ctrl-btn enq" id="btn-enq" onclick="doEnqueue()">+ Enqueue / Push</button>
+  <button class="ctrl-btn deq" id="btn-deq" onclick="doDequeue()">- Dequeue / Pop</button>
+  <button class="ctrl-btn deq" id="btn-enqf" onclick="doEnqueueFront()" style="display:none">+ Enqueue Frente</button>
+  <button class="ctrl-btn" onclick="doPeek()">👁 Peek</button>
+  <button class="ctrl-btn" onclick="clearStruct()">✕ Limpiar</button>
+  <span style="font-size:12px;color:var(--text3)" id="cap-info"></span>
+</div>
+
+<div class="canvas-wrap"><canvas id="cvs"></canvas></div>
+
+<div class="info-row">
+  <div class="info-card"><div class="info-val" id="stat-size">0</div><div class="info-lbl">Tamaño</div></div>
+  <div class="info-card"><div class="info-val" id="stat-peek">—</div><div class="info-lbl">Peek (frente/top)</div></div>
+  <div class="info-card"><div class="info-val" id="stat-empty">Sí</div><div class="info-lbl">¿Vacía?</div></div>
+  <div class="info-card"><div class="info-val" id="stat-full">No</div><div class="info-lbl">¿Llena?</div></div>
+</div>
+
+<div class="log-panel"><div class="log-title">Log de operaciones</div><div id="log-body"></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const cvs=document.getElementById('cvs'), ctx=cvs.getContext('2d');
+const CAP=8;
+let struct='queue', items=[], highlight=-1, highlightColor='#4ecdc4';
+
+// For circular queue
+let head=0, tail=0, circArr=new Array(CAP).fill(null), circCount=0;
+
+function setStruct(s) {
+  struct=s; clearStruct();
+  document.querySelectorAll('.controls .ctrl-btn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('btn-enqf').style.display = s==='deque'?'':'none';
+  document.getElementById('btn-enq').textContent = s==='stack'?'+ Push':'+ Enqueue / Push';
+  document.getElementById('btn-deq').textContent = s==='stack'?'- Pop':'- Dequeue / Pop';
+  document.getElementById('cap-info').textContent = s==='circular'?`Capacidad: ${CAP}`:'';
+}
+
+function getVal(){ return document.getElementById('inp-val').value||'?'; }
+
+function doEnqueue() {
+  const v=getVal();
+  if (struct==='circular') {
+    if (circCount>=CAP){log('<span>LLENA</span>: no se puede encolar');return;}
+    circArr[tail]=v; tail=(tail+1)%CAP; circCount++;
+    log(`<span>enqueue</span>: "${v}" en pos ${(tail-1+CAP)%CAP}`);
+  } else {
+    items.push({v,color:'#7c6fcd55',hl:true});
+    log(`<span>${struct==='stack'?'push':'enqueue'}</span>: "${v}"`);
+  }
+  flashHighlight(items.length-1,'#4ecdc4'); updateStats(); draw();
+}
+
+function doEnqueueFront() {
+  const v=getVal();
+  items.unshift({v,color:'#7c6fcd55',hl:true});
+  log(`<span>enqueue_frente</span>: "${v}"`);
+  flashHighlight(0,'#f4a261'); updateStats(); draw();
+}
+
+function doDequeue() {
+  if (struct==='circular') {
+    if (circCount===0){log('<span>VACÍA</span>: no se puede desencolar');return;}
+    const v=circArr[head]; circArr[head]=null; head=(head+1)%CAP; circCount--;
+    log(`<span>dequeue</span>: "${v}"`);
+  } else {
+    if (!items.length){log('<span>VACÍA</span>');return;}
+    const idx=struct==='stack'?items.length-1:0;
+    const removed=items.splice(idx,1)[0];
+    log(`<span>${struct==='stack'?'pop':'dequeue'}</span>: "${removed.v}"`);
+  }
+  updateStats(); draw();
+}
+
+function doPeek() {
+  if (struct==='circular') {
+    const v=circCount?circArr[head]:'—';
+    log(`<span>peek</span>: "${v}"`); return;
+  }
+  if (!items.length){log('<span>peek</span>: vacía');return;}
+  const idx=struct==='stack'?items.length-1:0;
+  log(`<span>peek</span>: "${items[idx].v}"`);
+  flashHighlight(idx,'#f4a261'); draw();
+}
+
+function flashHighlight(idx,color) {
+  highlight=idx; highlightColor=color; draw();
+  setTimeout(()=>{highlight=-1;draw();},600);
+}
+
+function clearStruct() {
+  items=[]; circArr=new Array(CAP).fill(null); head=0; tail=0; circCount=0;
+  document.getElementById('log-body').innerHTML='';
+  updateStats(); draw();
+}
+
+function log(msg) {
+  const d=document.getElementById('log-body');
+  d.innerHTML+=`<div class="log-item">${msg}</div>`;
+  d.scrollTop=d.scrollHeight;
+}
+
+function updateStats() {
+  const sz=struct==='circular'?circCount:items.length;
+  document.getElementById('stat-size').textContent=sz;
+  let pk='—';
+  if (struct==='circular') pk=circCount?circArr[head]:'—';
+  else if (items.length) pk=struct==='stack'?items[items.length-1].v:items[0].v;
+  document.getElementById('stat-peek').textContent=pk;
+  document.getElementById('stat-empty').textContent=sz===0?'Sí':'No';
+  document.getElementById('stat-full').textContent=(struct==='circular'&&circCount>=CAP)?'Sí':'No';
+}
+
+function draw() {
+  const W=cvs.offsetWidth*devicePixelRatio, H=cvs.offsetHeight*devicePixelRatio;
+  cvs.width=W; cvs.height=H; ctx.clearRect(0,0,W,H);
+
+  if (struct==='circular') drawCircular(W,H);
+  else if (struct==='stack') drawStack(W,H);
+  else drawLinear(W,H);
+}
+
+function drawLinear(W,H) {
+  if (!items.length) {
+    ctx.fillStyle='#ffffff22'; ctx.font=`${14*devicePixelRatio}px monospace`;
+    ctx.textAlign='center'; ctx.fillText('Cola vacía',W/2,H/2); return;
+  }
+  const iw=Math.min(80,W/items.length-6)*devicePixelRatio;
+  const ih=60*devicePixelRatio, gap=6*devicePixelRatio;
+  const totalW=items.length*(iw+gap)-gap;
+  let x=(W-totalW)/2, y=(H-ih)/2;
+  // label
+  ctx.fillStyle='#ffffff33'; ctx.font=`${11*devicePixelRatio}px monospace`;
+  ctx.textAlign='center';
+  if(struct==='queue'||struct==='deque'){ctx.fillText('FRENTE',x+iw/2,y-18*devicePixelRatio);ctx.fillText('FINAL',(W+totalW)/2-iw/2,y-18*devicePixelRatio);}
+
+  items.forEach((item,i)=>{
+    const hl=(i===highlight);
+    ctx.fillStyle=hl?highlightColor:(i===0&&struct!=='stack'?'#4ecdc444':'#7c6fcd44');
+    ctx.strokeStyle=hl?highlightColor:(i===0&&struct!=='stack'?'#4ecdc4':'#7c6fcd88');
+    ctx.lineWidth=2*devicePixelRatio;
+    roundRect(ctx,x,y,iw,ih,8*devicePixelRatio); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#e8e8f0'; ctx.font=`bold ${13*devicePixelRatio}px monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(item.v,x+iw/2,y+ih/2);
+    ctx.fillStyle='#ffffff33'; ctx.font=`${9*devicePixelRatio}px monospace`;
+    ctx.fillText(i,x+iw/2,y+ih+14*devicePixelRatio);
+    x+=iw+gap;
+  });
+}
+
+function drawStack(W,H) {
+  if (!items.length) {
+    ctx.fillStyle='#ffffff22'; ctx.font=`${14*devicePixelRatio}px monospace`;
+    ctx.textAlign='center'; ctx.fillText('Pila vacía',W/2,H/2); return;
+  }
+  const iw=100*devicePixelRatio, ih=38*devicePixelRatio, gap=3*devicePixelRatio;
+  const totalH=items.length*(ih+gap)-gap;
+  let y=(H+totalH)/2, x=(W-iw)/2;
+  items.forEach((item,i)=>{
+    y-=(ih+gap);
+    const isTop=(i===items.length-1);
+    ctx.fillStyle=isTop?'#7c6fcd55':'#7c6fcd22';
+    ctx.strokeStyle=isTop?'#a89fe8':'#7c6fcd44';
+    ctx.lineWidth=2*devicePixelRatio;
+    roundRect(ctx,x,y,iw,ih,6*devicePixelRatio); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#e8e8f0'; ctx.font=`bold ${13*devicePixelRatio}px monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(item.v,x+iw/2,y+ih/2);
+    if(isTop){ctx.fillStyle='#7c6fcdaa';ctx.font=`${10*devicePixelRatio}px monospace`;ctx.fillText('← TOP',x+iw+10*devicePixelRatio,y+ih/2);}
+  });
+}
+
+function drawCircular(W,H) {
+  const cx=W/2, cy=H/2, R=Math.min(W,H)*0.32;
+  const r=20*devicePixelRatio;
+  for (let i=0;i<CAP;i++) {
+    const angle=(i/CAP)*Math.PI*2-Math.PI/2;
+    const x=cx+R*Math.cos(angle), y=cy+R*Math.sin(angle);
+    const isHead=circCount>0&&i===head;
+    const isTail=circCount>0&&i===(tail-1+CAP)%CAP;
+    const hasVal=circArr[i]!==null;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=hasVal?(isHead?'#4ecdc444':'#7c6fcd44'):'#1a1a2488';
+    ctx.strokeStyle=isHead?'#4ecdc4':isTail?'#f4a261':hasVal?'#7c6fcd66':'#ffffff15';
+    ctx.lineWidth=2*devicePixelRatio; ctx.fill(); ctx.stroke();
+    ctx.fillStyle=hasVal?'#e8e8f0':'#ffffff22';
+    ctx.font=`bold ${12*devicePixelRatio}px monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(hasVal?circArr[i]:i,x,y);
+    if(isHead){ctx.fillStyle='#4ecdc4';ctx.font=`${9*devicePixelRatio}px monospace`;ctx.fillText('H',x,y-r-8*devicePixelRatio);}
+    if(isTail&&!(isHead&&circCount===1)){ctx.fillStyle='#f4a261';ctx.font=`${9*devicePixelRatio}px monospace`;ctx.fillText('T',x,y-r-8*devicePixelRatio);}
+  }
+  ctx.fillStyle='#ffffff44'; ctx.font=`${12*devicePixelRatio}px monospace`;
+  ctx.textAlign='center'; ctx.fillText(`${circCount}/${CAP}`,cx,cy);
+}
+
+function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+r,r);c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x+w-r,y+h,r);c.lineTo(x+r,y+h);c.arcTo(x,y+h,x,y+h-r,r);c.lineTo(x,y+r);c.arcTo(x,y,x+r,y,r);c.closePath();}
+
+updateStats(); draw();
+window.addEventListener('resize',draw);
+</script>
+{% endblock %}

@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+{% block title %}Visualizador — Sorts{% endblock %}
+{% block extra_style %}
+<style>
+.viz-header{margin-bottom:20px}
+.viz-title{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
+.viz-sub{font-size:13px;color:var(--text2)}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.ctrl-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);transition:all 0.15s}
+.ctrl-btn:hover{border-color:var(--border2);color:var(--text)}
+.ctrl-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctrl-btn.run{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctrl-btn.run:hover{background:var(--accent2);color:#0a0a0f}
+.ctrl-btn:disabled{opacity:0.4;cursor:not-allowed}
+.speed-wrap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3)}
+input[type=range]{accent-color:var(--accent);width:100px}
+.canvas-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px}
+canvas{display:block;width:100%;height:260px}
+.legend{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3)}
+.leg-dot{width:10px;height:10px;border-radius:3px}
+.stats-row{display:flex;gap:10px;margin-bottom:16px}
+.stat-sm{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;flex:1;text-align:center}
+.stat-sm-val{font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text)}
+.stat-sm-lbl{font-size:10px;color:var(--text3);margin-top:2px}
+.algo-info{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:12px;color:var(--text2);line-height:1.7}
+.algo-info strong{color:var(--accent2);font-family:var(--font-mono)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="viz-header">
+  <div class="viz-title">Visualizador — Algoritmos de Ordenamiento</div>
+  <div class="viz-sub">Observa paso a paso cómo cada algoritmo ordena la lista</div>
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn active" onclick="setAlgo('bubble')">Bubble</button>
+  <button class="ctrl-btn" onclick="setAlgo('selection')">Selection</button>
+  <button class="ctrl-btn" onclick="setAlgo('insertion')">Insertion</button>
+  <button class="ctrl-btn" onclick="setAlgo('merge')">Merge</button>
+  <button class="ctrl-btn" onclick="setAlgo('quick')">Quick</button>
+  <button class="ctrl-btn" onclick="setAlgo('counting')">Counting</button>
+  <button class="ctrl-btn run" id="btn-run" onclick="runSort()">▶ Ejecutar</button>
+  <button class="ctrl-btn" onclick="resetArr()">↺ Reset</button>
+  <button class="ctrl-btn" onclick="shuffle()">🔀 Mezclar</button>
+  <div class="speed-wrap">
+    <span>Velocidad</span>
+    <input type="range" id="speed" min="10" max="500" value="120" oninput="updateSpeed()">
+    <span id="speed-lbl">120ms</span>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat-sm"><div class="stat-sm-val" id="stat-comps">0</div><div class="stat-sm-lbl">Comparaciones</div></div>
+  <div class="stat-sm"><div class="stat-sm-val" id="stat-swaps">0</div><div class="stat-sm-lbl">Intercambios</div></div>
+  <div class="stat-sm"><div class="stat-sm-val" id="stat-time">0ms</div><div class="stat-sm-lbl">Tiempo</div></div>
+  <div class="stat-sm"><div class="stat-sm-val" id="stat-status">—</div><div class="stat-sm-lbl">Estado</div></div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cvs"></canvas>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#7c6fcd"></div> Sin procesar</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#f4a261"></div> Comparando</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#e86d5e"></div> Intercambiando</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#6bcb77"></div> Ordenado</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#4ecdc4"></div> Pivote</div>
+  </div>
+</div>
+
+<div class="algo-info" id="algo-info"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+let arr = [], N = 40, algo = 'bubble', delay = 120;
+let comps = 0, swaps = 0, running = false;
+let highlights = {}, sorted = new Set(), pivot = -1;
+let startTime = 0;
+
+const INFO = {
+  bubble: '<strong>Bubble Sort</strong> &nbsp;|&nbsp; O(n²) tiempo &nbsp;|&nbsp; O(1) espacio<br>Compara elementos adyacentes y los intercambia si están en orden incorrecto. Cada pasada "burbujea" el elemento mayor hacia el final.',
+  selection: '<strong>Selection Sort</strong> &nbsp;|&nbsp; O(n²) tiempo &nbsp;|&nbsp; O(1) espacio<br>Encuentra el mínimo en el subarreglo no ordenado y lo coloca en su posición correcta.',
+  insertion: '<strong>Insertion Sort</strong> &nbsp;|&nbsp; O(n²) peor caso, O(n) mejor &nbsp;|&nbsp; O(1) espacio<br>Construye la lista ordenada uno a uno, insertando cada elemento en su posición correcta.',
+  merge: '<strong>Merge Sort</strong> &nbsp;|&nbsp; O(n log n) &nbsp;|&nbsp; O(n) espacio<br>Divide y vencerás: divide la lista a la mitad recursivamente y luego combina las mitades ordenadas.',
+  quick: '<strong>Quick Sort</strong> &nbsp;|&nbsp; O(n log n) promedio, O(n²) peor &nbsp;|&nbsp; O(log n)<br>Elige un pivote y particiona el arreglo en menores y mayores que el pivote, luego ordena recursivamente.',
+  counting: '<strong>Counting Sort</strong> &nbsp;|&nbsp; O(n+k) &nbsp;|&nbsp; O(k) espacio<br>Cuenta frecuencias de cada valor y reconstruye el arreglo ordenado. No hace comparaciones.',
+};
+
+function setAlgo(a) {
+  algo = a;
+  document.querySelectorAll('.controls .ctrl-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('algo-info').innerHTML = INFO[a];
+  resetArr();
+}
+
+function updateSpeed() {
+  delay = 510 - parseInt(document.getElementById('speed').value);
+  document.getElementById('speed-lbl').value;
+  document.getElementById('speed-lbl').textContent = delay + 'ms';
+}
+
+function genArr() {
+  arr = Array.from({length: N}, () => Math.floor(Math.random() * 90) + 10);
+}
+
+function shuffle() { if (running) return; genArr(); highlights = {}; sorted = new Set(); pivot = -1; draw(); resetStats(); }
+function resetArr() { if (running) return; genArr(); highlights = {}; sorted = new Set(); pivot = -1; draw(); resetStats(); }
+function resetStats() { comps = swaps = 0; upd(); document.getElementById('stat-time').textContent = '0ms'; document.getElementById('stat-status').textContent = '—'; }
+function upd() { document.getElementById('stat-comps').textContent = comps; document.getElementById('stat-swaps').textContent = swaps; }
+
+function draw() {
+  const W = cvs.offsetWidth * devicePixelRatio, H = cvs.offsetHeight * devicePixelRatio;
+  cvs.width = W; cvs.height = H;
+  const w = W / arr.length, max = Math.max(...arr);
+  ctx.clearRect(0, 0, W, H);
+  arr.forEach((v, i) => {
+    const h = (v / max) * (H - 20);
+    const x = i * w + 1, y = H - h;
+    let color = '#7c6fcd55';
+    if (sorted.has(i)) color = '#6bcb7799';
+    if (highlights[i] === 'cmp') color = '#f4a261cc';
+    if (highlights[i] === 'swap') color = '#e86d5ecc';
+    if (i === pivot) color = '#4ecdc4cc';
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, Math.max(w - 2, 1), h);
+    // value label for small arrays
+    if (N <= 20) {
+      ctx.fillStyle = '#ffffff55';
+      ctx.font = `${Math.max(9, w*0.4)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(v, x + w/2, H - 4);
+    }
+  });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runSort() {
+  if (running) return;
+  running = true;
+  sorted = new Set(); highlights = {}; pivot = -1;
+  comps = swaps = 0; upd();
+  document.getElementById('btn-run').disabled = true;
+  document.getElementById('stat-status').textContent = '⏳ Corriendo';
+  startTime = Date.now();
+  document.getElementById('algo-info').innerHTML = INFO[algo];
+
+  const a = [...arr];
+  if (algo === 'bubble') await bubble(a);
+  else if (algo === 'selection') await selection(a);
+  else if (algo === 'insertion') await insertion(a);
+  else if (algo === 'merge') await mergeSort(a, 0, a.length - 1);
+  else if (algo === 'quick') await quickSort(a, 0, a.length - 1);
+  else if (algo === 'counting') await counting(a);
+
+  arr = a;
+  highlights = {}; pivot = -1;
+  for (let i = 0; i < arr.length; i++) sorted.add(i);
+  draw();
+  document.getElementById('stat-time').textContent = (Date.now() - startTime) + 'ms';
+  document.getElementById('stat-status').textContent = '✓ Listo';
+  running = false;
+  document.getElementById('btn-run').disabled = false;
+}
+
+async function bubble(a) {
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < a.length - i - 1; j++) {
+      highlights = {[j]: 'cmp', [j+1]: 'cmp'}; arr = [...a]; draw(); comps++; upd(); await sleep(delay);
+      if (a[j] > a[j+1]) {
+        highlights = {[j]: 'swap', [j+1]: 'swap'};
+        [a[j], a[j+1]] = [a[j+1], a[j]]; arr = [...a]; draw(); swaps++; upd(); await sleep(delay);
+      }
+    }
+    sorted.add(a.length - 1 - i);
+  }
+}
+
+async function selection(a) {
+  for (let i = 0; i < a.length; i++) {
+    let mi = i; pivot = i;
+    for (let j = i + 1; j < a.length; j++) {
+      highlights = {[j]: 'cmp', [mi]: 'cmp'}; arr = [...a]; draw(); comps++; upd(); await sleep(delay);
+      if (a[j] < a[mi]) { mi = j; }
+    }
+    if (mi !== i) {
+      highlights = {[i]: 'swap', [mi]: 'swap'};
+      [a[i], a[mi]] = [a[mi], a[i]]; arr = [...a]; draw(); swaps++; upd(); await sleep(delay);
+    }
+    sorted.add(i); pivot = -1;
+  }
+}
+
+async function insertion(a) {
+  sorted.add(0);
+  for (let i = 1; i < a.length; i++) {
+    let key = a[i], j = i - 1;
+    pivot = i;
+    while (j >= 0 && a[j] > key) {
+      highlights = {[j]: 'cmp', [j+1]: 'swap'}; a[j+1] = a[j]; arr = [...a]; draw(); comps++; swaps++; upd(); await sleep(delay); j--;
+    }
+    a[j+1] = key; arr = [...a];
+    sorted.add(i); pivot = -1; highlights = {}; draw(); await sleep(delay/2);
+  }
+}
+
+async function merge(a, l, m, r) {
+  const L = a.slice(l, m+1), R = a.slice(m+1, r+1);
+  let i = 0, j = 0, k = l;
+  while (i < L.length && j < R.length) {
+    highlights = {[l+i]: 'cmp', [m+1+j]: 'cmp'}; arr = [...a]; draw(); comps++; upd(); await sleep(delay);
+    if (L[i] <= R[j]) { a[k++] = L[i++]; }
+    else { a[k++] = R[j++]; swaps++; upd(); }
+    arr = [...a]; highlights = {}; draw();
+  }
+  while (i < L.length) a[k++] = L[i++];
+  while (j < R.length) a[k++] = R[j++];
+  arr = [...a]; draw();
+  for (let x = l; x <= r; x++) sorted.add(x);
+}
+
+async function mergeSort(a, l, r) {
+  if (l >= r) return;
+  const m = Math.floor((l + r) / 2);
+  await mergeSort(a, l, m);
+  await mergeSort(a, m+1, r);
+  await merge(a, l, m, r);
+}
+
+async function quickSort(a, lo, hi) {
+  if (lo >= hi) { sorted.add(lo); return; }
+  let p = lo; pivot = hi;
+  for (let i = lo; i < hi; i++) {
+    highlights = {[i]: 'cmp', [hi]: 'cmp'}; arr = [...a]; draw(); comps++; upd(); await sleep(delay);
+    if (a[i] < a[hi]) {
+      highlights = {[i]: 'swap', [p]: 'swap'};
+      [a[i], a[p]] = [a[p], a[i]]; arr = [...a]; draw(); swaps++; upd(); await sleep(delay); p++;
+    }
+  }
+  [a[p], a[hi]] = [a[hi], a[p]]; arr = [...a]; sorted.add(p); pivot = -1; highlights = {}; draw(); await sleep(delay);
+  await quickSort(a, lo, p-1);
+  await quickSort(a, p+1, hi);
+}
+
+async function counting(a) {
+  const max = Math.max(...a);
+  let cnt = new Array(max+1).fill(0);
+  for (let i = 0; i < a.length; i++) { cnt[a[i]]++; highlights={[i]:'cmp'}; arr=[...a]; draw(); comps++; upd(); await sleep(delay/2); }
+  let k = 0;
+  for (let v = 0; v <= max; v++) {
+    while (cnt[v]-- > 0) { a[k] = v; highlights={[k]:'swap'}; arr=[...a]; draw(); swaps++; upd(); sorted.add(k); k++; await sleep(delay/2); }
+  }
+}
+
+// init
+genArr();
+document.getElementById('algo-info').innerHTML = INFO['bubble'];
+draw();
+window.addEventListener('resize', draw);
+</script>
+{% endblock %}

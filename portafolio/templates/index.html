@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — Portafolio ED{% endblock %}
+
+{% block extra_style %}
+<style>
+.hero{margin-bottom:36px}
+.hero-eyebrow{font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px}
+.hero-title{font-size:32px;font-weight:600;color:var(--text);line-height:1.2;margin-bottom:8px}
+.hero-title span{color:var(--accent2)}
+.hero-sub{font-size:14px;color:var(--text2);max-width:520px;line-height:1.6}
+
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:36px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.stat.s-teal::before{background:var(--teal)}
+.stat.s-accent::before{background:var(--accent)}
+.stat.s-green::before{background:var(--green)}
+.stat.s-amber::before{background:var(--amber)}
+.stat-val{font-family:var(--font-mono);font-size:28px;font-weight:700;color:var(--text);line-height:1}
+.stat-lbl{font-size:12px;color:var(--text3);margin-top:6px}
+
+.section-header{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;margin-top:8px}
+.section-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.07em}
+.section-line{flex:1;height:1px;background:var(--border)}
+
+.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:32px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;text-decoration:none;transition:all 0.2s;display:block;position:relative;overflow:hidden}
+.card:hover{border-color:var(--border2);background:var(--bg3);transform:translateY(-1px)}
+.card-accent{position:absolute;top:0;left:0;right:0;height:2px}
+.c-teal .card-accent{background:var(--teal)}
+.c-green .card-accent{background:var(--green)}
+.c-blue .card-accent{background:var(--blue)}
+.c-coral .card-accent{background:var(--coral)}
+.c-amber .card-accent{background:var(--amber)}
+.c-purple .card-accent{background:var(--purple)}
+.c-orange .card-accent{background:var(--orange)}
+.card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.card-icon{width:32px;height:32px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.c-teal .card-icon{color:var(--teal)}
+.c-green .card-icon{color:var(--green)}
+.c-blue .card-icon{color:var(--blue)}
+.c-coral .card-icon{color:var(--coral)}
+.c-amber .card-icon{color:var(--amber)}
+.c-purple .card-icon{color:var(--purple)}
+.c-orange .card-icon{color:var(--orange)}
+.card-name{font-size:13px;font-weight:600;color:var(--text)}
+.card-practica{font-size:10px;color:var(--text3);margin-top:1px;font-family:var(--font-mono)}
+.card-desc{font-size:12px;color:var(--text2);line-height:1.5}
+.card-tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;margin-top:10px;background:var(--bg3);color:var(--text3);font-family:var(--font-mono)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hero">
+  <div class="hero-eyebrow">✦ Portafolio Semestral · 2026</div>
+  <h1 class="hero-title">Estructuras de <span>Datos</span></h1>
+  <p class="hero-sub">Colección de ejercicios implementados en Python a lo largo del semestre. Selecciona cualquier ejercicio para ejecutarlo en tiempo real.</p>
+  <div style="margin-top:16px;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:620px">
+    <div><div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-bottom:3px">ALUMNO</div><div style="font-size:12px;color:var(--text)">Alan Fernando Elí Arvizu Velásquez</div></div>
+    <div><div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-bottom:3px">DOCENTE</div><div style="font-size:12px;color:var(--text)">Dr. Alejandro Morgan</div></div>
+    <div><div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-bottom:3px">CARRERA</div><div style="font-size:12px;color:var(--text)">Ing. en Software</div></div>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat s-teal">
+    <div class="stat-val">{{ ejercicios|length }}</div>
+    <div class="stat-lbl">Ejercicios totales</div>
+  </div>
+  <div class="stat s-accent">
+    <div class="stat-val">7</div>
+    <div class="stat-lbl">Prácticas cubiertas</div>
+  </div>
+  <div class="stat s-green">
+    <div class="stat-val">8</div>
+    <div class="stat-lbl">Estructuras de datos</div>
+  </div>
+  <div class="stat s-amber">
+    <div class="stat-val">100%</div>
+    <div class="stat-lbl">Completados</div>
+  </div>
+</div>
+
+{% set practicas_orden = ['Ordenamiento','Práctica 1','Práctica 2','Práctica 3','Práctica 4','Práctica 5','Práctica 6','Práctica 7'] %}
+{% for practica in practicas_orden %}
+  {% set items = ejercicios|selectattr('practica','equalto',practica)|list %}
+  {% if items %}
+  <div class="section-header">
+    <div class="section-title">{{ practica }}</div>
+    <div class="section-line"></div>
+  </div>
+  <div class="cards-grid">
+    {% for e in items %}
+    <a href="/ejercicio/{{ e.id }}" class="card c-{{ e.color }}">
+      <div class="card-accent"></div>
+      <div class="card-top">
+        <div class="card-icon"><i class="ti ti-{{ e.icono }}"></i></div>
+        <div>
+          <div class="card-name">{{ e.nombre }}</div>
+          <div class="card-practica">{{ e.tema }}</div>
+        </div>
+      </div>
+      <div class="card-desc">{{ e.descripcion }}</div>
+      <span class="card-tag">{{ e.practica }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endfor %}
+{% endblock %}
